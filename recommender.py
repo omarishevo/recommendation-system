@@ -1,124 +1,96 @@
-# app_no_sklearn.py
+# app_minimal.py
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-st.set_page_config(page_title="Item-Based Recommender (No sklearn)", layout="wide")
-st.title("📊 Item-Based Collaborative Filtering Recommender (No sklearn)")
+st.set_page_config(page_title="Item-Based Recommender", layout="wide")
+st.title("📊 Minimal Item-Based Recommender (Streamlit + Pandas Only)")
 
 # ------------------------
-# 1. Load or generate ratings
+# 1. Load or generate dataset
 # ------------------------
-def generate_ratings(num_users=50, num_items=30, min_ratings=5, max_ratings=15, seed=42):
-    np.random.seed(seed)
+def generate_ratings(num_users=20, num_items=15):
     data = []
-    for user_id in range(1, num_users+1):
-        n = np.random.randint(min_ratings, max_ratings+1)
-        items = np.random.choice(range(101, 101+num_items), n, replace=False)
+    for user_id in range(1, num_users + 1):
+        items = list(range(101, 101 + num_items))
         for item_id in items:
-            rating = np.random.randint(1,6)
+            rating = (user_id + item_id) % 5 + 1  # simple pattern for demo
             data.append([user_id, item_id, rating])
-    return pd.DataFrame(data, columns=["user_id","item_id","rating"])
+    return pd.DataFrame(data, columns=["user_id", "item_id", "rating"])
 
 uploaded_file = st.file_uploader("Upload ratings CSV (optional)", type=["csv"])
-if uploaded_file is not None:
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
     df = generate_ratings()
-st.write("Sample dataset:", df.head())
+
+st.write("Sample data:", df.head())
 
 # ------------------------
-# 2. Train/test split per user
+# 2. User-item matrix
 # ------------------------
-def train_test_split_by_user(df, test_ratio=0.2, seed=42):
-    np.random.seed(seed)
-    train, test = [], []
-    for user_id, group in df.groupby("user_id"):
-        n_test = max(1, int(len(group)*test_ratio))
-        test_idx = np.random.choice(group.index, n_test, replace=False)
-        test.append(group.loc[test_idx])
-        train.append(group.drop(test_idx))
-    return pd.concat(train).reset_index(drop=True), pd.concat(test).reset_index(drop=True)
-
-train_df, test_df = train_test_split_by_user(df)
+user_item = df.pivot_table(index="user_id", columns="item_id", values="rating").fillna(0)
 
 # ------------------------
-# 3. User–item matrix
+# 3. Simple item–item similarity (using pandas)
 # ------------------------
-user_item_matrix = train_df.pivot_table(index="user_id", columns="item_id", values="rating").fillna(0)
+# Cosine similarity formula: sim(A,B) = (A*B).sum() / (sqrt(A^2).sum() * sqrt(B^2).sum())
+def cosine_similarity_pandas(matrix):
+    items = matrix.columns
+    similarity = pd.DataFrame(index=items, columns=items, dtype=float)
+    for i in items:
+        for j in items:
+            vec_i = matrix[i]
+            vec_j = matrix[j]
+            num = (vec_i * vec_j).sum()
+            den = (vec_i**2).sum()**0.5 * (vec_j**2).sum()**0.5
+            similarity.loc[i,j] = num / den if den != 0 else 0
+    return similarity
+
+item_similarity = cosine_similarity_pandas(user_item)
 
 # ------------------------
-# 4. Manual item–item cosine similarity
+# 4. Recommend items for a user
 # ------------------------
-def cosine_similarity_matrix(matrix):
-    norms = np.linalg.norm(matrix, axis=0)
-    similarity = matrix.T @ matrix / (norms[:,None] * norms[None,:] + 1e-9)
-    return pd.DataFrame(similarity, index=matrix.columns, columns=matrix.columns)
-
-item_similarity_df = cosine_similarity_matrix(user_item_matrix)
-
-# ------------------------
-# 5. Item-based recommendation function
-# ------------------------
-def recommend_items(user_id, user_item_matrix, item_similarity_df, k=5, min_similarity=0.2):
-    if user_id not in user_item_matrix.index:
+def recommend_items(user_id, k=5, min_sim=0.2):
+    if user_id not in user_item.index:
         return []
-    user_ratings = user_item_matrix.loc[user_id]
-    rated_items = user_ratings[user_ratings > 0]
+    user_ratings = user_item.loc[user_id]
+    rated_items = user_ratings[user_ratings > 0].index.tolist()
     scores = {}
-    for item, rating in rated_items.items():
-        similar_items = item_similarity_df[item]
-        similar_items = similar_items[similar_items >= min_similarity]
-        for sim_item, sim in similar_items.items():
+    for item in rated_items:
+        sims = item_similarity[item]
+        sims = sims[sims >= min_sim]
+        for sim_item, sim_val in sims.items():
             if sim_item in rated_items:
                 continue
-            scores[sim_item] = scores.get(sim_item,0) + sim*rating
-    ranked_items = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return [item for item,_ in ranked_items[:k]]
+            scores[sim_item] = scores.get(sim_item,0) + sim_val * user_ratings[item]
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return [item for item,_ in ranked[:k]]
 
 # ------------------------
-# 6. Precision@K evaluation
-# ------------------------
-def precision_at_k(user_item_matrix, test_df, item_similarity_df, k=5, min_similarity=0.2):
-    precisions = []
-    for user_id in test_df["user_id"].unique():
-        true_items = set(test_df[test_df["user_id"]==user_id]["item_id"])
-        recommended = recommend_items(user_id, user_item_matrix, item_similarity_df, k, min_similarity)
-        if not recommended:
-            continue
-        hits = len(set(recommended) & true_items)
-        precisions.append(hits/k)
-    return sum(precisions)/len(precisions) if precisions else 0
-
-p_at_5 = precision_at_k(user_item_matrix, test_df, item_similarity_df)
-st.metric("Precision@5", f"{p_at_5:.4f}")
-
-# ------------------------
-# 7. Interactive recommendations
+# 5. Interactive recommendations
 # ------------------------
 st.subheader("Get Recommendations for a User")
-user_id_input = st.number_input("Enter User ID:", min_value=int(df.user_id.min()), max_value=int(df.user_id.max()), value=int(df.user_id.min()))
+user_input = st.number_input("User ID:", min_value=int(df.user_id.min()), max_value=int(df.user_id.max()), value=int(df.user_id.min()))
 k_input = st.slider("Number of recommendations (K)", min_value=1, max_value=10, value=5)
 min_sim_input = st.slider("Minimum similarity threshold", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
 
 if st.button("Recommend"):
-    recs = recommend_items(user_id_input, user_item_matrix, item_similarity_df, k=k_input, min_similarity=min_sim_input)
+    recs = recommend_items(user_input, k_input, min_sim_input)
     if recs:
-        st.write(f"Top {k_input} recommended items for user {user_id_input}: {recs}")
+        st.write(f"Top {k_input} recommendations for user {user_input}: {recs}")
     else:
-        st.write(f"No recommendations for user {user_id_input}.")
+        st.write(f"No recommendations available for user {user_input}.")
 
 # ------------------------
-# 8. Visualizations
+# 6. Top-N most rated items
 # ------------------------
-st.subheader("Item–Item Similarity Heatmap")
-fig, ax = plt.subplots(figsize=(10,8))
-sns.heatmap(item_similarity_df, cmap="coolwarm", ax=ax)
-st.pyplot(fig)
-
 st.subheader("Top-N Most Rated Items Globally")
 top_items = df.groupby("item_id")["rating"].count().sort_values(ascending=False).head(10)
 st.bar_chart(top_items)
+
+# ------------------------
+# 7. Item–item similarity preview
+# ------------------------
+st.subheader("Item–Item Similarity Preview (first 10 items)")
+st.dataframe(item_similarity.iloc[:10, :10])
