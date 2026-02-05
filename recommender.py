@@ -83,14 +83,25 @@ if st.button("Recommend"):
         st.write(f"No recommendations available for user {user_input}.")
 
 # ------------------------
-# 6. Top-N most rated items
 # ------------------------
-st.subheader("Top-N Most Rated Items Globally")
-top_items = df.groupby("item_id")["rating"].count().sort_values(ascending=False).head(10)
-st.bar_chart(top_items)
+# 6. Top-N items globally (different metrics)
+# ------------------------
+st.subheader("Top-N Most Rated Items Globally (Different Metrics)")
 
-# ------------------------
-# 7. Item–item similarity preview
-# ------------------------
-st.subheader("Item–Item Similarity Preview (first 10 items)")
-st.dataframe(item_similarity.iloc[:10, :10])
+N = st.slider("Select Top-N", 1, 10, 5)
+
+# 1. Most rated items (count)
+top_count = df.groupby("item_id")["rating"].count().sort_values(ascending=False).head(N)
+st.markdown("**Most Rated Items (Count)**")
+st.bar_chart(top_count)
+
+# 2. Highest average rating
+top_avg = df.groupby("item_id")["rating"].mean().sort_values(ascending=False).head(N)
+st.markdown("**Highest Average Rating**")
+st.bar_chart(top_avg)
+
+# 3. Highest total rating sum
+top_sum = df.groupby("item_id")["rating"].sum().sort_values(ascending=False).head(N)
+st.markdown("**Highest Total Rating**")
+st.bar_chart(top_sum)
+
