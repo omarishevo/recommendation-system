@@ -1,14 +1,13 @@
-# app.py
+# app_no_sklearn.py
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-st.set_page_config(page_title="Item-Based Recommender", layout="wide")
-st.title("📊 Item-Based Collaborative Filtering Recommender")
+st.set_page_config(page_title="Item-Based Recommender (No sklearn)", layout="wide")
+st.title("📊 Item-Based Collaborative Filtering Recommender (No sklearn)")
 
 # ------------------------
 # 1. Load or generate ratings
@@ -47,14 +46,22 @@ def train_test_split_by_user(df, test_ratio=0.2, seed=42):
 train_df, test_df = train_test_split_by_user(df)
 
 # ------------------------
-# 3. User–item matrix and item similarity
+# 3. User–item matrix
 # ------------------------
 user_item_matrix = train_df.pivot_table(index="user_id", columns="item_id", values="rating").fillna(0)
-item_similarity = cosine_similarity(user_item_matrix.T)
-item_similarity_df = pd.DataFrame(item_similarity, index=user_item_matrix.columns, columns=user_item_matrix.columns)
 
 # ------------------------
-# 4. Item-based recommendation function
+# 4. Manual item–item cosine similarity
+# ------------------------
+def cosine_similarity_matrix(matrix):
+    norms = np.linalg.norm(matrix, axis=0)
+    similarity = matrix.T @ matrix / (norms[:,None] * norms[None,:] + 1e-9)
+    return pd.DataFrame(similarity, index=matrix.columns, columns=matrix.columns)
+
+item_similarity_df = cosine_similarity_matrix(user_item_matrix)
+
+# ------------------------
+# 5. Item-based recommendation function
 # ------------------------
 def recommend_items(user_id, user_item_matrix, item_similarity_df, k=5, min_similarity=0.2):
     if user_id not in user_item_matrix.index:
@@ -73,7 +80,7 @@ def recommend_items(user_id, user_item_matrix, item_similarity_df, k=5, min_simi
     return [item for item,_ in ranked_items[:k]]
 
 # ------------------------
-# 5. Precision@K evaluation
+# 6. Precision@K evaluation
 # ------------------------
 def precision_at_k(user_item_matrix, test_df, item_similarity_df, k=5, min_similarity=0.2):
     precisions = []
@@ -90,7 +97,7 @@ p_at_5 = precision_at_k(user_item_matrix, test_df, item_similarity_df)
 st.metric("Precision@5", f"{p_at_5:.4f}")
 
 # ------------------------
-# 6. Interactive recommendations
+# 7. Interactive recommendations
 # ------------------------
 st.subheader("Get Recommendations for a User")
 user_id_input = st.number_input("Enter User ID:", min_value=int(df.user_id.min()), max_value=int(df.user_id.max()), value=int(df.user_id.min()))
@@ -105,7 +112,7 @@ if st.button("Recommend"):
         st.write(f"No recommendations for user {user_id_input}.")
 
 # ------------------------
-# 7. Visualizations
+# 8. Visualizations
 # ------------------------
 st.subheader("Item–Item Similarity Heatmap")
 fig, ax = plt.subplots(figsize=(10,8))
