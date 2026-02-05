@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(page_title="Item-Based Recommender", layout="wide")
-st.title("📊 Minimal Item-Based Recommender (Streamlit + Pandas Only)")
+st.title("📊 Minimal Item-Based Recommender system")
 
 # ------------------------
 # 1. Load or generate dataset
