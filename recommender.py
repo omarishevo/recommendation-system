@@ -4,6 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
+import requests
+import base64
+from io import BytesIO
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
@@ -163,6 +166,32 @@ def get_price_range_recommendations(df, min_price, max_price, category=None, top
     return filtered.sort_values("weighted_score", ascending=False).head(top_n)
 
 
+@st.cache_data(show_spinner=False)
+def fetch_image_b64(url: str) -> str:
+    """Fetch image server-side and return as base64 data URI so the
+    browser never hotlinks Amazon CDN directly (which blocks <img> tags)."""
+    if not url or not url.startswith("http"):
+        return ""
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.amazon.in/",
+            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        }
+        resp = requests.get(url, headers=headers, timeout=6)
+        if resp.status_code == 200 and "image" in resp.headers.get("Content-Type", ""):
+            mime = resp.headers["Content-Type"].split(";")[0].strip()
+            b64  = base64.b64encode(resp.content).decode()
+            return f"data:{mime};base64,{b64}"
+    except Exception:
+        pass
+    return ""
+
+
 def render_product_card(row, rank=None, show_similarity=False):
     prefix   = f"#{rank} " if rank else ""
     disc_str = f"&#8377;{row['discounted_price']:,.0f}" if pd.notna(row['discounted_price']) else "N/A"
@@ -174,6 +203,9 @@ def render_product_card(row, rank=None, show_similarity=False):
     cat      = str(row['main_category'])
     img_url  = str(row.get('img_link', ''))
     link     = str(row.get('product_link', ''))
+
+    # ── Fetch image server-side (bypasses Amazon CDN hotlink block) ───────────
+    img_src = fetch_image_b64(img_url)
 
     # similarity bar — fully inline styles only
     sim_html = ""
@@ -199,14 +231,13 @@ def render_product_card(row, rank=None, show_similarity=False):
                   f"font-weight:600;text-decoration:none;'>View on Amazon &#x2197;</a>"
                   if link.startswith("http") else "")
 
-    # product image
-    if img_url.startswith("http"):
+    # ── Image block ───────────────────────────────────────────────────────────
+    if img_src:
         img_html = (
             "<div style='min-width:100px;max-width:100px;margin-right:16px;"
             "display:flex;align-items:center;justify-content:center;'>"
-            f"<img src='{img_url}' style='width:90px;height:90px;object-fit:contain;"
-            "border-radius:6px;border:1px solid #FFD699;' "
-            "onerror=\"this.src='';this.parentNode.innerHTML='<span style=\\'font-size:2rem;\\'>&#128230;</span>';\" />"
+            f"<img src='{img_src}' style='width:90px;height:90px;object-fit:contain;"
+            "border-radius:6px;border:1px solid #FFD699;background:#fff;' />"
             "</div>"
         )
     else:
@@ -214,7 +245,7 @@ def render_product_card(row, rank=None, show_similarity=False):
             "<div style='min-width:100px;max-width:100px;margin-right:16px;"
             "display:flex;align-items:center;justify-content:center;"
             "background:#FFF3E0;border-radius:6px;border:1px solid #FFD699;height:90px;'>"
-            "<span style='font-size:2rem;'>&#128230;</span></div>"
+            "<span style='font-size:2.2rem;'>&#128230;</span></div>"
         )
 
     st.markdown(
