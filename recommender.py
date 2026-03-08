@@ -164,41 +164,78 @@ def get_price_range_recommendations(df, min_price, max_price, category=None, top
 
 
 def render_product_card(row, rank=None, show_similarity=False):
-    prefix = f"#{rank} " if rank else ""
-    disc_str = f"₹{row['discounted_price']:,.0f}" if pd.notna(row['discounted_price']) else "N/A"
-    act_str  = f"₹{row['actual_price']:,.0f}"    if pd.notna(row['actual_price'])    else ""
-    disc_pct = f"{row['discount_percentage']:.0f}%" if pd.notna(row['discount_percentage']) else ""
-    rating   = f"⭐ {row['rating']:.1f}" if pd.notna(row['rating']) else "N/A"
-    rcount   = f"{int(row['rating_count']):,} ratings" if pd.notna(row['rating_count']) and row['rating_count'] > 0 else ""
-    name     = str(row['product_name'])[:110] + ("…" if len(str(row['product_name'])) > 110 else "")
+    prefix   = f"#{rank} " if rank else ""
+    disc_str = f"&#8377;{row['discounted_price']:,.0f}" if pd.notna(row['discounted_price']) else "N/A"
+    act_str  = f"&#8377;{row['actual_price']:,.0f}"     if pd.notna(row['actual_price'])     else ""
+    disc_pct = f"{row['discount_percentage']:.0f}%"     if pd.notna(row['discount_percentage']) else ""
+    rating   = f"&#11088; {row['rating']:.1f}"          if pd.notna(row['rating'])           else "N/A"
+    rcount   = f"{int(row['rating_count']):,} ratings"  if pd.notna(row['rating_count']) and row['rating_count'] > 0 else ""
+    name     = str(row['product_name'])[:120] + ("..." if len(str(row['product_name'])) > 120 else "")
     cat      = str(row['main_category'])
+    img_url  = str(row.get('img_link', ''))
+    link     = str(row.get('product_link', ''))
 
+    # similarity bar — fully inline styles only
     sim_html = ""
-    if show_similarity and 'similarity' in row and pd.notna(row['similarity']):
+    if show_similarity and 'similarity' in row.index and pd.notna(row['similarity']):
         pct = int(row['similarity'] * 100)
-        sim_html = f"""
-        <div style='margin-top:6px;'>
-          <span style='font-size:0.78rem;color:#888;'>Match: {pct}%</span>
-          <div class='sim-bar-outer'><div class='sim-bar-inner' style='width:{pct}%'></div></div>
-        </div>"""
+        sim_html = (
+            "<div style='margin-top:8px;'>"
+            f"<span style='font-size:0.78rem;color:#888;'>Match score: "
+            f"<b style='color:#FF6600;'>{pct}%</b></span>"
+            "<div style='background:#eeeeee;border-radius:6px;height:8px;width:100%;margin-top:3px;'>"
+            f"<div style='background:linear-gradient(90deg,#FF9900,#FF6600);border-radius:6px;"
+            f"height:8px;width:{pct}%;'></div>"
+            "</div></div>"
+        )
 
-    link = str(row.get('product_link', ''))
-    link_html = f"<a href='{link}' target='_blank' style='font-size:0.78rem;color:#FF6600;'>View on Amazon ↗</a>" if link and link.startswith("http") else ""
+    # badges — fully inline
+    badge = "display:inline-block;border-radius:4px;padding:2px 8px;font-size:0.76rem;font-weight:600;margin-right:4px;color:white;"
+    cat_badge  = f"<span style='{badge}background:#FF9900;'>{cat}</span>"
+    rat_badge  = f"<span style='{badge}background:#27ae60;'>{rating}</span>"
+    disc_badge = (f"<span style='{badge}background:#2980b9;'>{disc_pct} off</span>"
+                  if disc_pct else "")
+    link_html  = (f"<a href='{link}' target='_blank' style='font-size:0.8rem;color:#FF6600;"
+                  f"font-weight:600;text-decoration:none;'>View on Amazon &#x2197;</a>"
+                  if link.startswith("http") else "")
 
-    st.markdown(f"""
-    <div class='product-card'>
-      <h4>{prefix}{name}</h4>
-      <span class='badge'>{cat}</span>
-      <span class='badge badge-green'>{rating}</span>
-      {"<span class='badge badge-blue'>" + disc_pct + " off</span>" if disc_pct else ""}
-      <br><br>
-      <span style='font-size:1rem;font-weight:700;color:#B12704;'>{disc_str}</span>
-      {"&nbsp;<span style='font-size:0.82rem;color:#888;text-decoration:line-through;'>" + act_str + "</span>" if act_str else ""}
-      &nbsp;&nbsp;<span style='font-size:0.82rem;color:#555;'>{rcount}</span>
-      {sim_html}
-      <br>{link_html}
-    </div>
-    """, unsafe_allow_html=True)
+    # product image
+    if img_url.startswith("http"):
+        img_html = (
+            "<div style='min-width:100px;max-width:100px;margin-right:16px;"
+            "display:flex;align-items:center;justify-content:center;'>"
+            f"<img src='{img_url}' style='width:90px;height:90px;object-fit:contain;"
+            "border-radius:6px;border:1px solid #FFD699;' "
+            "onerror=\"this.src='';this.parentNode.innerHTML='<span style=\\'font-size:2rem;\\'>&#128230;</span>';\" />"
+            "</div>"
+        )
+    else:
+        img_html = (
+            "<div style='min-width:100px;max-width:100px;margin-right:16px;"
+            "display:flex;align-items:center;justify-content:center;"
+            "background:#FFF3E0;border-radius:6px;border:1px solid #FFD699;height:90px;'>"
+            "<span style='font-size:2rem;'>&#128230;</span></div>"
+        )
+
+    st.markdown(
+        "<div style='background:#fff8f0;border:1px solid #FFD699;border-left:5px solid #FF9900;"
+        "border-radius:10px;padding:14px 16px;margin-bottom:10px;'>"
+        "<div style='display:flex;align-items:flex-start;'>"
+        + img_html +
+        "<div style='flex:1;min-width:0;'>"
+        f"<div style='font-size:0.97rem;font-weight:700;color:#232F3E;margin-bottom:6px;"
+        f"line-height:1.4;'>{prefix}{name}</div>"
+        f"<div style='margin-bottom:8px;'>{cat_badge}{rat_badge}{disc_badge}</div>"
+        f"<div style='margin-bottom:6px;'>"
+        f"<span style='font-size:1.05rem;font-weight:800;color:#B12704;'>{disc_str}</span>"
+        + (f"&nbsp;<span style='font-size:0.82rem;color:#aaa;text-decoration:line-through;'>{act_str}</span>"
+           if act_str else "") +
+        f"&nbsp;&nbsp;<span style='font-size:0.8rem;color:#777;'>{rcount}</span></div>"
+        + sim_html +
+        f"<div style='margin-top:8px;'>{link_html}</div>"
+        "</div></div></div>",
+        unsafe_allow_html=True
+    )
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -216,7 +253,7 @@ with st.sidebar:
 # ── Gate on upload ─────────────────────────────────────────────────────────────
 if uploaded is None:
     st.markdown("""
-    <div class='main-header'>
+    <div style='background:linear-gradient(135deg,#FF9900 0%,#FF6600 100%);padding:2rem;border-radius:14px;color:white;text-align:center;margin-bottom:1.5rem;'>
         <h1>🛒 Amazon Product Recommender</h1>
         <p>Content-Based · Category-Based · Price-Filtered · EDA Dashboard</p>
     </div>""", unsafe_allow_html=True)
@@ -228,7 +265,7 @@ _, tfidf_matrix = build_tfidf(df["combined_text"].tolist())
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class='main-header'>
+<div style='background:linear-gradient(135deg,#FF9900 0%,#FF6600 100%);padding:2rem;border-radius:14px;color:white;text-align:center;margin-bottom:1.5rem;'>
     <h1>🛒 Amazon Product Recommender</h1>
     <p>Discover similar products, top-rated picks, best deals, and more</p>
 </div>""", unsafe_allow_html=True)
@@ -257,7 +294,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1 — CONTENT-BASED RECOMMENDER
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown('<div class="section-header">🔍 Find Similar Products</div>', unsafe_allow_html=True)
+    st.markdown("<div style='color:#FF6600;border-bottom:2px solid #FF9900;padding-bottom:0.3rem;margin:1.2rem 0 0.8rem;font-size:1.1rem;font-weight:700;'>🔍 Find Similar Products</div>", unsafe_allow_html=True)
     st.write("Search for a product and get recommendations based on name, category, description & reviews.")
 
     search_query = st.text_input("🔎 Search product name", placeholder="e.g. boAt headphones, USB cable, smart bulb…")
@@ -289,7 +326,7 @@ with tab1:
 # TAB 2 — CATEGORY-BASED TOP PICKS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown('<div class="section-header">🏆 Top Products by Category</div>', unsafe_allow_html=True)
+    st.markdown("<div style='color:#FF6600;border-bottom:2px solid #FF9900;padding-bottom:0.3rem;margin:1.2rem 0 0.8rem;font-size:1.1rem;font-weight:700;'>🏆 Top Products by Category</div>", unsafe_allow_html=True)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -330,7 +367,7 @@ with tab2:
 # TAB 3 — PRICE-FILTERED RECOMMENDATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown('<div class="section-header">💸 Find Products in Your Budget</div>', unsafe_allow_html=True)
+    st.markdown("<div style='color:#FF6600;border-bottom:2px solid #FF9900;padding-bottom:0.3rem;margin:1.2rem 0 0.8rem;font-size:1.1rem;font-weight:700;'>💸 Find Products in Your Budget</div>", unsafe_allow_html=True)
 
     price_min = float(df["discounted_price"].min())
     price_max = float(df["discounted_price"].max())
@@ -372,7 +409,7 @@ with tab3:
 # TAB 4 — EDA DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.markdown('<div class="section-header">📊 Exploratory Data Analysis</div>', unsafe_allow_html=True)
+    st.markdown("<div style='color:#FF6600;border-bottom:2px solid #FF9900;padding-bottom:0.3rem;margin:1.2rem 0 0.8rem;font-size:1.1rem;font-weight:700;'>📊 Exploratory Data Analysis</div>", unsafe_allow_html=True)
 
     ORANGE = "#FF9900"
     DARK   = "#FF6600"
@@ -502,7 +539,7 @@ with tab4:
 # TAB 5 — DATA EXPLORER
 # ══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.markdown('<div class="section-header">🗂️ Data Explorer</div>', unsafe_allow_html=True)
+    st.markdown("<div style='color:#FF6600;border-bottom:2px solid #FF9900;padding-bottom:0.3rem;margin:1.2rem 0 0.8rem;font-size:1.1rem;font-weight:700;'>🗂️ Data Explorer</div>", unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns(3)
     cat_f    = col_a.multiselect("Category", sorted(df["main_category"].unique()),
